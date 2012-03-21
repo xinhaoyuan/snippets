@@ -10,6 +10,11 @@
 /*
  * ChangeLog:
 
+ * 2012-03-21
+
+ * - New SetChildren Interface for reduce potential ``update'' costs
+ * - Fixed the ``direct returns without updating'' in remove
+
  * 2011-05-24:
 
  * - Add __RBT_NeedFixUp switch for performance issue, now could be
@@ -29,8 +34,8 @@
 #error  __RBT_NodeType not defined
 #endif
 
-#ifndef __RBT_KeyType
-#error  __RBT_KeyType not defined
+#ifndef __RBT_DataType
+#error  __RBT_DataType not defined
 #endif
 
 #ifndef __RBT_NodeNull
@@ -42,7 +47,7 @@
 #endif
 
 #ifndef __RBT_NewRedNode
-#error  __RBT_NewRedNode(k) not defined
+#error  __RBT_NewRedNode(d) not defined
 #endif
 
 #ifndef __RBT_SwapNodeContent
@@ -57,8 +62,8 @@
 #error  __RBT_SetRank(n,r) not defined
 #endif
 
-#ifndef __RBT_CompareKey
-#error  __RBT_CompareKey(k,n) not defined
+#ifndef __RBT_CompareData
+#error  __RBT_CompareData(d,n) not defined
 #endif
 
 #ifndef __RBT_AcquireParentAndDir
@@ -89,6 +94,10 @@
 #error  __RBT_SetRightChildFromLeftChild(n,p) not defined
 #endif
 
+#ifndef __RBT_SetChildren
+#error  __RBT_SetChildren(n,l,r) not defined
+#endif
+
 #ifndef __RBT_ThrowException
 #error  __RBT_ThrowException(msg) not defined
 #endif
@@ -97,6 +106,29 @@
 #define DIR_ROOT      1
 #define DIR_LEFT      2
 #define DIR_RIGHT     3
+
+void
+__RBT_UpdateToRoot(__RBT_NodeType node)
+{
+	__RBT_NodeType parent;
+	int dir;
+
+	while (1)
+	{
+		__RBT_AcquireParentAndDir(node, parent, dir);
+		switch (dir)
+		{
+		case DIR_ROOT:
+			break;
+		case DIR_LEFT:
+			__RBT_SetLeftChild(parent, node);
+			break;
+		case DIR_RIGHT:
+			__RBT_SetLeftChild(parent, node);
+			break;
+		}
+	}
+}
 
 int
 __RBT_RedFixUp(__RBT_NodeType *root, __RBT_NodeType node)
@@ -185,8 +217,7 @@ __RBT_RedFixUp(__RBT_NodeType *root, __RBT_NodeType node)
 						 __RBT_SetLeftChildFromRightChild(node, left_right);
 						 __RBT_SetRightChildFromLeftChild(left, left_right);
 
-						 __RBT_SetLeftChild(left_right, left);
-						 __RBT_SetRightChild(left_right, node);
+						 __RBT_SetChildren(left_right, left, node);
 
 						 __RBT_SetRank(left_right, __RBT_GetRank(node));
 						 __RBT_SetRank(node, -__RBT_GetRank(node) + 1);
@@ -264,8 +295,7 @@ __RBT_RedFixUp(__RBT_NodeType *root, __RBT_NodeType node)
 						 __RBT_SetRightChildFromLeftChild(node, right_left);
 						 __RBT_SetLeftChildFromRightChild(right, right_left);
 
-						 __RBT_SetRightChild(right_left, right);
-						 __RBT_SetLeftChild(right_left, node);
+						 __RBT_SetChildren(right_left, node, right);
 
 						 __RBT_SetRank(right_left, __RBT_GetRank(node));
 						 __RBT_SetRank(node, -__RBT_GetRank(node) + 1);
@@ -410,8 +440,7 @@ __RBT_BlackFixUp(__RBT_NodeType *root, __RBT_NodeType parent, int dir)
 							  // Double rotation
 							  __RBT_SetRightChildFromLeftChild(node, c_left);
 							  __RBT_SetLeftChildFromRightChild(right, c_left);
-							  __RBT_SetLeftChild(c_left, node);
-							  __RBT_SetRightChild(c_left, right);
+							  __RBT_SetChildren(c_left, node, right);
 
 							  if (promote)
 							  {
@@ -530,8 +559,7 @@ __RBT_BlackFixUp(__RBT_NodeType *root, __RBT_NodeType parent, int dir)
 							  // Double rotation
 							  __RBT_SetLeftChildFromRightChild(node, c_right);
 							  __RBT_SetRightChildFromLeftChild(left, c_right);
-							  __RBT_SetRightChild(c_right, node);
-							  __RBT_SetLeftChild(c_right, left);
+							  __RBT_SetChildren(c_right, left, node);
 
 							  if (promote)
 							  {
@@ -553,11 +581,11 @@ __RBT_BlackFixUp(__RBT_NodeType *root, __RBT_NodeType parent, int dir)
 }
 
 __RBT_NodeType
-__RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
+__RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_DataType data)
 {
 	 if (root == __RBT_NodeNull)
 	 {
-		  *node =__RBT_NewRedNode(key);
+		  *node =__RBT_NewRedNode(data);
 		  __RBT_RedFixUp(&root, *node);
 	 }
 	 else
@@ -565,7 +593,7 @@ __RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 		  __RBT_NodeType cur = root;
 		  while (1)
 		  {
-			   int c = __RBT_CompareKey(key, cur);
+			   int c = __RBT_CompareData(data, cur);
 			   if (c == 0)
 			   {
 					*node = cur;
@@ -575,7 +603,7 @@ __RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 			   {
 					if (__RBT_GetLeftChild(cur) == __RBT_NodeNull)
 					{
-						 *node = __RBT_NewRedNode(key);
+						 *node = __RBT_NewRedNode(data);
 						 __RBT_SetLeftChild(cur, *node);
 						 __RBT_RedFixUp(&root, *node);
 						 break;
@@ -586,7 +614,7 @@ __RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 			   {
 					if (__RBT_GetRightChild(cur) == __RBT_NodeNull)
 					{
-						 *node = __RBT_NewRedNode(key);
+						 *node = __RBT_NewRedNode(data);
 						 __RBT_SetRightChild(cur, *node);
 						 __RBT_RedFixUp(&root, *node);
 						 break;
@@ -600,7 +628,7 @@ __RBT_Insert(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 }
 
 __RBT_NodeType
-__RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
+__RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_DataType data)
 {
 	 if (root == __RBT_NodeNull)
 		  return root;
@@ -610,7 +638,7 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 	 int dir;
 	 while (1)
 	 {
-		  int cmp = __RBT_CompareKey(key, cur);
+		  int cmp = __RBT_CompareData(data, cur);
 		  if (cmp == 0)
 		  {
 			   if (__RBT_GetLeftChild(cur) == __RBT_NodeNull)
@@ -625,7 +653,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 						 if (dir == DIR_LEFT)
 							  __RBT_SetLeftChild(parent, cur);
 						 else __RBT_SetRightChild(parent, cur);
-						 /* FIXME */
+#ifdef __RBT_NeedFixup
+						 ___RBT_UpdateToRoot(parent);
+#endif
 						 return root;
 					}
 					else if (__RBT_GetRank(cur) < 0)
@@ -637,7 +667,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 						 else if (dir == DIR_LEFT)
 							  __RBT_SetLeftChild(parent, cur);
 						 else __RBT_SetRightChild(parent, cur);
-						 /* FIXME */
+#ifdef __RBT_NeedFixup
+						 ___RBT_UpdateToRoot(parent);
+#endif
 						 return root;
 					}
 					else
@@ -672,7 +704,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 							  if (parent == __RBT_NodeNull)
 								   return cur;
 							  else __RBT_SetLeftChild(parent, cur);
-							  /* FIXME */
+#ifdef __RBT_NeedFixup
+							  ___RBT_UpdateToRoot(parent);
+#endif
 							  return root;
 						 }
 						 else if (__RBT_GetRank(cur) < 0)
@@ -682,7 +716,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 							  if (parent == __RBT_NodeNull)
 								   return cur;
 							  else __RBT_SetLeftChild(parent, cur);
-							  /* FIXME */
+#ifdef __RBT_NeedFixup
+							  ___RBT_UpdateToRoot(parent);
+#endif
 							  return root;
 						 }
 						 else
@@ -708,7 +744,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 					{
 						 /* KILL RED 1 */
 						 __RBT_SetRightChild(parent, cur);
-						 /* FIXME */
+#ifdef __RBT_NeedFixup
+						 ___RBT_UpdateToRoot(parent);
+#endif
 						 return root;
 					}
 					else if (__RBT_GetRank(cur) < 0)
@@ -716,7 +754,9 @@ __RBT_Remove(__RBT_NodeType root, __RBT_NodeType *node, __RBT_KeyType key)
 						 /* Kill RED 2 */
 						 __RBT_SetRank(cur, __RBT_GetRank(*node));
 						 __RBT_SetRightChild(parent, cur);
-						 /* FIXME */
+#ifdef __RBT_NeedFixup
+						 ___RBT_UpdateToRoot(parent);
+#endif
 						 return root;
 					}
 					else
