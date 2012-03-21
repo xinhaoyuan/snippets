@@ -11,20 +11,24 @@ int _count;
 typedef struct node_s *node_t;
 node_t _root;
 struct node_s {
-	 int data;
+	 int key;
 	 int rank;
 	 node_t parent, left, right;
 } _node[NODE_COUNT];
 
 #define __RBT_NodeType   node_t
-#define __RBT_DataType    int
+#define __RBT_KeyType    int
 #define __RBT_NodeNull   NULL
 #define __RBT_TouchNode
-#define __RBT_NewRedNode(k) ({ node_t node = _node + (_count ++); node->data = k; node->parent = node->left = node->right = __RBT_NodeNull; node->rank = -1; node; })
-#define __RBT_SwapNodeContent(a,b) ({int t = (a)->data; (a)->data = (b)->data; (b)->data = t;})
+#define __RBT_SetupNewRedNode(n) do {						\
+		n->parent = n->left = n->right = __RBT_NodeNull;	\
+		n->rank = -1;										\
+	} while(0)
+#define __RBT_SwapNodeContent(a,b) ({int t = (a)->key; (a)->key = (b)->key; (b)->key = t;})
 #define __RBT_GetRank(n)      ((n) == __RBT_NodeNull ? 1 : (n)->rank)
 #define __RBT_SetRank(n,r)    (n)->rank = (r)
-#define __RBT_CompareData(k,n) (k == (n)->data ? 0 : (k < (n)->data ? -1 : 1))
+#define __RBT_CompareKey(k,n) (k == (n)->key ? 0 : (k < (n)->key ? -1 : 1))
+#define __RBT_CompareNode(n1,n2) ((n1)->key == (n2)->key ? 0 : ((n1)->key < (n2)->key ? -1 : 1))
 #define __RBT_AcquireParentAndDir(n,p,d)					\
 	 {														\
 		  (p) = (n)->parent;								\
@@ -42,6 +46,7 @@ struct node_s {
 	 { (n)->right = (p)->left; if ((n)->right) (n)->right->parent = (n); }
 #define __RBT_ThrowException(msg)					\
 	 { printf("Exception: %s\n", msg); exit(-1); }
+#define __RBT_NeedFixUp 0
 
 #include "rbt_algo.h"
 
@@ -65,7 +70,7 @@ print(__RBT_NodeType node, int last_rank)
 		 
 	 fputc('(', stdout);
 	 print(__RBT_GetLeftChild(node), node->rank);
-	 printf("[%d,%d]", node->rank, node->data);
+	 printf("[%d,%d]", node->rank, node->key);
 	 print(__RBT_GetRightChild(node), node->rank);
 	 fputc(')', stdout);
 	 if (node->parent == __RBT_NodeNull) printf("\n");
@@ -92,10 +97,11 @@ main(void)
 	 
 	 for (i = 0; i != NODE_COUNT; ++ i)
 	 {
-		  _root = __RBT_Insert(_root, &node, perm[i]);
-		  _root->parent = __RBT_NodeNull;
+		 node = _node + (_count ++); node->key = perm[i];
+		 _root = __RBT_Insert(_root, node);
+		 _root->parent = __RBT_NodeNull;
 	 }
-
+	 
 	 for (i = NODE_COUNT * 0.2; i != NODE_COUNT * 0.8; ++ i)
 	 {
 		  _root = __RBT_Remove(_root, &node, perm[i]);
@@ -109,6 +115,18 @@ main(void)
 	 /* } */
 
 	 print(_root, -__RBT_GetRank(_root));
+
+	 node = _root;
+	 while (node->left != NULL) node = node->left;
+
+	 __RBT_NodeType n;
+	 while (1)
+	 {
+		 printf("%d\n", node->key);
+		 n = __RBT_GetRight(node);
+		 if (n == NULL) break;
+		 else node = n;
+	 }
 	 	 
 	 return 0;
 }
